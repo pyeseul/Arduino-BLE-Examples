@@ -1,0 +1,95 @@
+/*
+  LED Brightness Control (BLE Central)
+
+  This code reads a potentiometer and sends a brightness value (0–255)
+  to the BLE peripheral’s LED brightness characteristic.
+*/
+
+#include <ArduinoBLE.h>
+
+const int potPin = A0;
+
+void setup() {
+  Serial.begin(9600);
+  while (!Serial);
+
+  pinMode(potPin, INPUT);
+
+  BLE.begin();
+
+  Serial.println("BLE Central - LED brightness control");
+
+  // scan for the LED service
+  BLE.scanForUuid("19b10000-e8f2-537e-4f6c-d104768a1214");
+}
+
+void loop() {
+  BLEDevice peripheral = BLE.available();
+
+  if (peripheral) {
+    Serial.print("Found ");
+    Serial.print(peripheral.address());
+    Serial.print(" '");
+    Serial.print(peripheral.localName());
+    Serial.print("' ");
+    Serial.println(peripheral.advertisedServiceUuid());
+
+    if (peripheral.localName() != "LED") {
+      return;
+    }
+
+    BLE.stopScan();
+    controlLed(peripheral);
+
+    BLE.scanForUuid("19b10000-e8f2-537e-4f6c-d104768a1214");
+  }
+}
+
+void controlLed(BLEDevice peripheral) {
+
+  Serial.println("Connecting ...");
+
+  if (peripheral.connect()) {
+    Serial.println("Connected");
+  } else {
+    Serial.println("Failed to connect!");
+    return;
+  }
+
+  Serial.println("Discovering attributes ...");
+  if (!peripheral.discoverAttributes()) {
+    Serial.println("Attribute discovery failed!");
+    peripheral.disconnect();
+    return;
+  }
+  Serial.println("Attributes discovered");
+
+  // LED brightness characteristic
+  BLECharacteristic ledCharacteristic =
+    peripheral.characteristic("19b10001-e8f2-537e-4f6c-d104768a1214");
+
+  if (!ledCharacteristic || !ledCharacteristic.canWrite()) {
+    Serial.println("Peripheral missing writable LED characteristic!");
+    peripheral.disconnect();
+    return;
+  }
+
+  while (peripheral.connected()) {
+
+    // Read 0–1023
+    int potValue = analogRead(potPin);
+
+    // Map to 0–255 brightness
+    uint8_t brightness = map(potValue, 0, 1023, 0, 255);
+
+    Serial.print("Brightness: ");
+    Serial.println(brightness);
+
+    // Send brightness to the BLE peripheral
+    ledCharacteristic.writeValue(brightness);
+
+    delay(50);  // small delay to avoid spamming BLE
+  }
+
+  Serial.println("Peripheral disconnected");
+}
