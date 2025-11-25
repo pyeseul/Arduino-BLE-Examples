@@ -1,0 +1,58 @@
+/*
+  LED Brightness (BLE Peripheral)
+
+  This code receives a brightness value (0–255) from the Central
+  and change the LED brightness accordingly.
+*/
+
+
+#include <ArduinoBLE.h>
+
+BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214"); // BLE LED Service
+
+// Brightness characteristic (0–255)
+BLEByteCharacteristic brightnessCharacteristic(
+  "19B10001-E8F2-537E-4F6C-D104768A1214",
+  BLERead | BLEWrite
+);
+
+// IMPORTANT: use a PWM-capable pin (pin 4 is NOT PWM on Nano 33 IoT)
+const int ledPin = 5;
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+
+  if (!BLE.begin()) {
+    while (1);
+  }
+
+  BLE.setLocalName("LED");
+  BLE.setAdvertisedService(ledService);
+
+  ledService.addCharacteristic(brightnessCharacteristic);
+  BLE.addService(ledService);
+
+  // start with LED off
+  brightnessCharacteristic.writeValue(0);
+
+  BLE.advertise();
+}
+
+void loop() {
+  BLEDevice central = BLE.central();
+
+  if (central) {
+
+    while (central.connected()) {
+
+      // if new brightness value received
+      if (brightnessCharacteristic.written()) {
+
+        uint8_t brightness = brightnessCharacteristic.value();  // 0–255
+
+        // Apply PWM brightness
+        analogWrite(ledPin, brightness);
+      }
+    }
+  }
+}
